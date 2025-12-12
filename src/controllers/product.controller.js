@@ -179,7 +179,8 @@ exports.createProduct = async (req, res) => {
       } else if (req.file.buffer) {
         // Memory storage - for now we'll reject this and require proper Cloudinary setup
         return res.status(400).json({
-          message: "Image upload failed. Please ensure Cloudinary is properly configured.",
+          message:
+            "Image upload failed. Please ensure Cloudinary is properly configured.",
         });
       } else {
         return res.status(400).json({
@@ -204,12 +205,20 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ message: "Product name is required" });
     }
 
-    if (originalPrice === undefined || originalPrice === null || originalPrice === "") {
+    if (
+      originalPrice === undefined ||
+      originalPrice === null ||
+      originalPrice === ""
+    ) {
       console.log("Missing required field: originalPrice");
       return res.status(400).json({ message: "Original price is required" });
     }
 
-    if (discountedPrice === undefined || discountedPrice === null || discountedPrice === "") {
+    if (
+      discountedPrice === undefined ||
+      discountedPrice === null ||
+      discountedPrice === ""
+    ) {
       console.log("Missing required field: discountedPrice");
       return res.status(400).json({ message: "Discounted price is required" });
     }
@@ -221,7 +230,9 @@ exports.createProduct = async (req, res) => {
 
     if (!description || description.trim() === "") {
       console.log("Missing required field: description");
-      return res.status(400).json({ message: "Product description is required" });
+      return res
+        .status(400)
+        .json({ message: "Product description is required" });
     }
 
     if (!category || category.trim() === "") {
@@ -235,12 +246,16 @@ exports.createProduct = async (req, res) => {
 
     if (isNaN(parsedOriginalPrice)) {
       console.log("Invalid originalPrice:", originalPrice);
-      return res.status(400).json({ message: "Original price must be a valid number" });
+      return res
+        .status(400)
+        .json({ message: "Original price must be a valid number" });
     }
 
     if (isNaN(parsedDiscountedPrice)) {
       console.log("Invalid discountedPrice:", discountedPrice);
-      return res.status(400).json({ message: "Discounted price must be a valid number" });
+      return res
+        .status(400)
+        .json({ message: "Discounted price must be a valid number" });
     }
 
     const productData = {
