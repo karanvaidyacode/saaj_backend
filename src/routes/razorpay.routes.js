@@ -8,8 +8,8 @@ const {
 const router = express.Router();
 
 const razorpay = new Razorpay({
-  key_id: "rzp_live_S0V9OfWCncAp7b", // Replace with your Key ID
-  key_secret: "AHFdhvbhjHwAwKZE2WbnwktG", // Replace with your Key Secret
+  key_id: process.env.RAZORPAY_API_KEY, // Replace with your Key ID
+  key_secret: process.env.RAZORPAY_API_SECRET, // Replace with your Key Secret
 });
 
 // Endpoint to create a new Razorpay order
