@@ -3,13 +3,17 @@ const Product = require('./Product');
 const User = require('./User');
 const Order = require('./Order');
 const Customer = require('./Customer');
+const CustomOrder = require('./CustomOrder');
+const OfferSubscriber = require('./OfferSubscriber');
 
 // Export models with graceful degradation
 let models = {
   Product,
   User,
   Order,
-  Customer
+  Customer,
+  CustomOrder,
+  OfferSubscriber
 };
 
 // Try to initialize associations if database is available
@@ -32,6 +36,16 @@ try {
   // Customer associations
   if (Customer && typeof Customer.associate === 'function') {
     Customer.associate(models);
+  }
+
+  // CustomOrder associations
+  if (CustomOrder && typeof CustomOrder.associate === 'function') {
+    CustomOrder.associate(models);
+  }
+
+  // OfferSubscriber associations
+  if (OfferSubscriber && typeof OfferSubscriber.associate === 'function') {
+    OfferSubscriber.associate(models);
   }
 } catch (error) {
   console.warn('Warning: Could not initialize model associations due to database connection issues');

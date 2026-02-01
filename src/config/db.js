@@ -131,7 +131,7 @@ const connectDB = async () => {
     console.log("Database connected successfully.");
 
     // Sync tables (no destructive changes)
-    await sequelize.sync({ alter: false });
+    await sequelize.sync({ alter: true });
 
     return true;
   } catch (error) {

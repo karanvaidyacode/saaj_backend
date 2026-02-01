@@ -1,31 +1,5 @@
-const { pineconeIndex } = require('../utils/pinecone');
-
-// Convert payment data to vector representation
-const paymentToVector = (payment) => {
-  // This is a simplified example - in a real application, you would use an embedding model
-  // to convert payment details into vectors
-  const vector = new Array(1536).fill(0);
-  
-  // Simple hash-based approach for demonstration
-  const hash = (str) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash);
-  };
-  
-  // Create a simple vector representation based on payment properties
-  const text = `${payment.method || ''} ${payment.status || ''} ${payment.customerEmail || ''} ${payment.amount || ''}`.toLowerCase();
-  for (let i = 0; i < Math.min(10, text.length); i++) {
-    const index = hash(text.substring(i, i + 5)) % 1536;
-    vector[index] = (vector[index] || 0) + 1;
-  }
-  
-  return vector;
-};
+// Remove Pinecone references and replace with PostgreSQL-based logic
+const { User } = require('../models/postgres');
 
 // In-memory payment storage (in production, you might want to use a database)
 let payments = {};
@@ -74,26 +48,6 @@ exports.createPayment = async (req, res) => {
     
     payments[paymentId] = payment;
     
-    // Also save to Pinecone
-    try {
-      const vector = paymentToVector(payment);
-      const metadata = {
-        ...payment,
-        paymentId: paymentId,
-        createdAt: payment.createdAt,
-        updatedAt: payment.updatedAt
-      };
-      
-      await pineconeIndex.upsert([{
-        id: paymentId,
-        values: vector,
-        metadata: metadata
-      }]);
-    } catch (pineconeError) {
-      console.error('Error saving payment to Pinecone:', pineconeError);
-      // Don't fail the request if Pinecone fails, just log the error
-    }
-    
     res.status(201).json(payment);
   } catch (error) {
     console.error("Error creating payment:", error);
@@ -120,25 +74,6 @@ exports.updatePayment = async (req, res) => {
     
     payments[id] = updatedPayment;
     
-    // Also update in Pinecone
-    try {
-      const vector = paymentToVector(updatedPayment);
-      const metadata = {
-        ...updatedPayment,
-        paymentId: id,
-        updatedAt: updatedPayment.updatedAt
-      };
-      
-      await pineconeIndex.upsert([{
-        id: id,
-        values: vector,
-        metadata: metadata
-      }]);
-    } catch (pineconeError) {
-      console.error('Error updating payment in Pinecone:', pineconeError);
-      // Don't fail the request if Pinecone fails, just log the error
-    }
-    
     res.json(updatedPayment);
   } catch (error) {
     console.error("Error updating payment:", error);
@@ -156,14 +91,6 @@ exports.deletePayment = async (req, res) => {
     }
     
     delete payments[id];
-    
-    // Also delete from Pinecone
-    try {
-      await pineconeIndex.deleteOne(id);
-    } catch (pineconeError) {
-      console.error('Error deleting payment from Pinecone:', pineconeError);
-      // Don't fail the request if Pinecone fails, just log the error
-    }
     
     res.json({ success: true });
   } catch (error) {
@@ -192,29 +119,10 @@ exports.getPaymentsByStatus = async (req, res) => {
   }
 };
 
-// Search similar payments using vector similarity
+// Search similar payments (Stubbed out Pinecone)
 exports.searchSimilarPayments = async (req, res) => {
   try {
-    const { query, topK = 10 } = req.body;
-    
-    // Convert query to vector
-    const queryVector = paymentToVector({ 
-      method: query, 
-      status: query, 
-      customerEmail: query,
-      amount: query
-    });
-    
-    // Query Pinecone
-    const queryRequest = {
-      vector: queryVector,
-      topK: parseInt(topK),
-      includeMetadata: true
-    };
-    
-    const response = await pineconeIndex.query(queryRequest);
-    
-    res.json(response.matches);
+    res.json([]);
   } catch (error) {
     console.error("Error searching similar payments:", error);
     res.status(500).json({ error: error.message });

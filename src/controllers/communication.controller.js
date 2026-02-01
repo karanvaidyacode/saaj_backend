@@ -1,31 +1,5 @@
-const { pineconeIndex } = require('../utils/pinecone');
-
-// Convert communication data to vector representation
-const communicationToVector = (communication) => {
-  // This is a simplified example - in a real application, you would use an embedding model
-  // to convert communication details into vectors
-  const vector = new Array(1536).fill(0);
-  
-  // Simple hash-based approach for demonstration
-  const hash = (str) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash);
-  };
-  
-  // Create a simple vector representation based on communication properties
-  const text = `${communication.type || ''} ${communication.subject || ''} ${communication.content || ''} ${communication.recipient || ''}`.toLowerCase();
-  for (let i = 0; i < Math.min(10, text.length); i++) {
-    const index = hash(text.substring(i, i + 5)) % 1536;
-    vector[index] = (vector[index] || 0) + 1;
-  }
-  
-  return vector;
-};
+// Remove Pinecone references and replace with PostgreSQL-based logic
+const { User } = require('../models/postgres');
 
 // In-memory communication storage (in production, you might want to use a database)
 let communications = {};
@@ -75,26 +49,6 @@ exports.createCommunication = async (req, res) => {
     
     communications[communicationId] = communication;
     
-    // Also save to Pinecone
-    try {
-      const vector = communicationToVector(communication);
-      const metadata = {
-        ...communication,
-        communicationId: communicationId,
-        createdAt: communication.createdAt,
-        updatedAt: communication.updatedAt
-      };
-      
-      await pineconeIndex.upsert([{
-        id: communicationId,
-        values: vector,
-        metadata: metadata
-      }]);
-    } catch (pineconeError) {
-      console.error('Error saving communication to Pinecone:', pineconeError);
-      // Don't fail the request if Pinecone fails, just log the error
-    }
-    
     res.status(201).json(communication);
   } catch (error) {
     console.error("Error creating communication:", error);
@@ -121,25 +75,6 @@ exports.updateCommunication = async (req, res) => {
     
     communications[id] = updatedCommunication;
     
-    // Also update in Pinecone
-    try {
-      const vector = communicationToVector(updatedCommunication);
-      const metadata = {
-        ...updatedCommunication,
-        communicationId: id,
-        updatedAt: updatedCommunication.updatedAt
-      };
-      
-      await pineconeIndex.upsert([{
-        id: id,
-        values: vector,
-        metadata: metadata
-      }]);
-    } catch (pineconeError) {
-      console.error('Error updating communication in Pinecone:', pineconeError);
-      // Don't fail the request if Pinecone fails, just log the error
-    }
-    
     res.json(updatedCommunication);
   } catch (error) {
     console.error("Error updating communication:", error);
@@ -157,14 +92,6 @@ exports.deleteCommunication = async (req, res) => {
     }
     
     delete communications[id];
-    
-    // Also delete from Pinecone
-    try {
-      await pineconeIndex.deleteOne(id);
-    } catch (pineconeError) {
-      console.error('Error deleting communication from Pinecone:', pineconeError);
-      // Don't fail the request if Pinecone fails, just log the error
-    }
     
     res.json({ success: true });
   } catch (error) {
@@ -185,25 +112,6 @@ exports.sendCommunication = async (req, res) => {
     communications[id].status = 'sent';
     communications[id].sentAt = new Date().toISOString();
     communications[id].updatedAt = new Date().toISOString();
-    
-    // Also update in Pinecone
-    try {
-      const vector = communicationToVector(communications[id]);
-      const metadata = {
-        ...communications[id],
-        communicationId: id,
-        updatedAt: communications[id].updatedAt
-      };
-      
-      await pineconeIndex.upsert([{
-        id: id,
-        values: vector,
-        metadata: metadata
-      }]);
-    } catch (pineconeError) {
-      console.error('Error updating communication status in Pinecone:', pineconeError);
-      // Don't fail the request if Pinecone fails, just log the error
-    }
     
     res.json(communications[id]);
   } catch (error) {
@@ -233,29 +141,10 @@ exports.searchCommunications = async (req, res) => {
   }
 };
 
-// Search similar communications using vector similarity
+// Search similar communications (Stubbed out Pinecone)
 exports.searchSimilarCommunications = async (req, res) => {
   try {
-    const { query, topK = 10 } = req.body;
-    
-    // Convert query to vector
-    const queryVector = communicationToVector({ 
-      type: query,
-      subject: query, 
-      content: query, 
-      recipient: query
-    });
-    
-    // Query Pinecone
-    const queryRequest = {
-      vector: queryVector,
-      topK: parseInt(topK),
-      includeMetadata: true
-    };
-    
-    const response = await pineconeIndex.query(queryRequest);
-    
-    res.json(response.matches);
+    res.json([]);
   } catch (error) {
     console.error("Error searching similar communications:", error);
     res.status(500).json({ error: error.message });

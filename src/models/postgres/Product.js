@@ -19,9 +19,14 @@ const Product = sequelize.define('Product', {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
   },
-  image: {
-    type: DataTypes.STRING,
-    allowNull: false
+  media: {
+    type: DataTypes.JSON,
+    allowNull: false,
+    defaultValue: []
+  },
+  quantity: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
   },
   description: {
     type: DataTypes.TEXT,
@@ -38,7 +43,15 @@ const Product = sequelize.define('Product', {
   reviews: {
     type: DataTypes.INTEGER,
     defaultValue: 0
-  }
+  },
+  sku: {
+    type: DataTypes.STRING,
+    unique: true
+  },
+  image: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
 }, {
   timestamps: true,
   tableName: 'products'

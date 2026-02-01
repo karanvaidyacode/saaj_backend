@@ -24,9 +24,11 @@ exports.sendOTP = async (req, res) => {
       const tempPassword = await User.hashPassword("temp_password_" + Date.now());
       user = await User.create({
         email,
-        password: tempPassword, // Add a temporary password
+        password: tempPassword,
         firstName: defaultName,
-        isVerified: false
+        isVerified: false,
+        otp: otp,
+        otpCreatedAt: new Date()
       });
     } else {
       await User.update(

@@ -1,41 +1,13 @@
-const { pineconeIndex } = require('../utils/pinecone');
-
-// Convert custom order data to vector representation
-const customOrderToVector = (order) => {
-  // This is a simplified example - in a real application, you would use an embedding model
-  // to convert custom order details into vectors
-  const vector = new Array(1536).fill(0);
-  
-  // Simple hash-based approach for demonstration
-  const hash = (str) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash);
-  };
-  
-  // Create a simple vector representation based on custom order properties
-  const text = `${order.customerName || ''} ${order.customerEmail || ''} ${order.designDescription || ''} ${order.materials?.join(' ') || ''}`.toLowerCase();
-  for (let i = 0; i < Math.min(10, text.length); i++) {
-    const index = hash(text.substring(i, i + 5)) % 1536;
-    vector[index] = (vector[index] || 0) + 1;
-  }
-  
-  return vector;
-};
-
-// In-memory custom order storage (in production, you might want to use a database)
-let customOrders = {};
-let nextCustomOrderId = 1;
+const { CustomOrder } = require('../models/postgres');
+const { Sequelize } = require('sequelize');
 
 // Get all custom orders
 exports.getAllCustomOrders = async (req, res) => {
   try {
-    const orderList = Object.values(customOrders);
-    res.json(orderList);
+    const orders = await CustomOrder.findAll({
+      order: [['createdAt', 'DESC']]
+    });
+    res.json(orders);
   } catch (error) {
     console.error("Error fetching custom orders:", error);
     res.status(500).json({ error: error.message });
@@ -46,7 +18,7 @@ exports.getAllCustomOrders = async (req, res) => {
 exports.getCustomOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = customOrders[id];
+    const order = await CustomOrder.findByPk(id);
     
     if (!order) {
       return res.status(404).json({ error: "Custom order not found" });
@@ -63,37 +35,10 @@ exports.getCustomOrderById = async (req, res) => {
 exports.createCustomOrder = async (req, res) => {
   try {
     const orderData = req.body;
-    const orderId = `custom_${nextCustomOrderId++}`;
-    
-    const order = {
-      id: orderId,
+    const order = await CustomOrder.create({
       ...orderData,
-      status: 'pending', // Default status
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    customOrders[orderId] = order;
-    
-    // Also save to Pinecone
-    try {
-      const vector = customOrderToVector(order);
-      const metadata = {
-        ...order,
-        orderId: orderId,
-        createdAt: order.createdAt,
-        updatedAt: order.updatedAt
-      };
-      
-      await pineconeIndex.upsert([{
-        id: orderId,
-        values: vector,
-        metadata: metadata
-      }]);
-    } catch (pineconeError) {
-      console.error('Error saving custom order to Pinecone:', pineconeError);
-      // Don't fail the request if Pinecone fails, just log the error
-    }
+      status: 'pending'
+    });
     
     res.status(201).json(order);
   } catch (error) {
@@ -106,40 +51,13 @@ exports.createCustomOrder = async (req, res) => {
 exports.updateCustomOrder = async (req, res) => {
   try {
     const { id } = req.params;
-    const orderData = req.body;
+    const [updated] = await CustomOrder.update(req.body, { where: { id } });
     
-    if (!customOrders[id]) {
+    if (!updated) {
       return res.status(404).json({ error: "Custom order not found" });
     }
     
-    const updatedOrder = {
-      ...customOrders[id],
-      ...orderData,
-      id: id,
-      updatedAt: new Date().toISOString()
-    };
-    
-    customOrders[id] = updatedOrder;
-    
-    // Also update in Pinecone
-    try {
-      const vector = customOrderToVector(updatedOrder);
-      const metadata = {
-        ...updatedOrder,
-        orderId: id,
-        updatedAt: updatedOrder.updatedAt
-      };
-      
-      await pineconeIndex.upsert([{
-        id: id,
-        values: vector,
-        metadata: metadata
-      }]);
-    } catch (pineconeError) {
-      console.error('Error updating custom order in Pinecone:', pineconeError);
-      // Don't fail the request if Pinecone fails, just log the error
-    }
-    
+    const updatedOrder = await CustomOrder.findByPk(id);
     res.json(updatedOrder);
   } catch (error) {
     console.error("Error updating custom order:", error);
@@ -151,19 +69,10 @@ exports.updateCustomOrder = async (req, res) => {
 exports.deleteCustomOrder = async (req, res) => {
   try {
     const { id } = req.params;
+    const deleted = await CustomOrder.destroy({ where: { id } });
     
-    if (!customOrders[id]) {
+    if (!deleted) {
       return res.status(404).json({ error: "Custom order not found" });
-    }
-    
-    delete customOrders[id];
-    
-    // Also delete from Pinecone
-    try {
-      await pineconeIndex.deleteOne(id);
-    } catch (pineconeError) {
-      console.error('Error deleting custom order from Pinecone:', pineconeError);
-      // Don't fail the request if Pinecone fails, just log the error
     }
     
     res.json({ success: true });
@@ -179,64 +88,36 @@ exports.updateCustomOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
     
-    if (!customOrders[id]) {
+    const [updated] = await CustomOrder.update({ status }, { where: { id } });
+    
+    if (!updated) {
       return res.status(404).json({ error: "Custom order not found" });
     }
     
-    customOrders[id].status = status;
-    customOrders[id].updatedAt = new Date().toISOString();
-    
-    // Also update in Pinecone
-    try {
-      const vector = customOrderToVector(customOrders[id]);
-      const metadata = {
-        ...customOrders[id],
-        orderId: id,
-        updatedAt: customOrders[id].updatedAt
-      };
-      
-      await pineconeIndex.upsert([{
-        id: id,
-        values: vector,
-        metadata: metadata
-      }]);
-    } catch (pineconeError) {
-      console.error('Error updating custom order status in Pinecone:', pineconeError);
-      // Don't fail the request if Pinecone fails, just log the error
-    }
-    
-    res.json(customOrders[id]);
+    const updatedOrder = await CustomOrder.findByPk(id);
+    res.json(updatedOrder);
   } catch (error) {
     console.error("Error updating custom order status:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
-// Search similar custom orders using vector similarity
+// Search similar custom orders using DB
 exports.searchSimilarCustomOrders = async (req, res) => {
   try {
-    const { query, topK = 10 } = req.body;
-    
-    // Convert query to vector
-    const queryVector = customOrderToVector({ 
-      customerName: query, 
-      customerEmail: query, 
-      designDescription: query,
-      materials: [query]
+    const { query } = req.body;
+    const orders = await CustomOrder.findAll({
+      where: {
+        [Sequelize.Op.or]: [
+          { customerName: { [Sequelize.Op.iLike]: `%${query}%` } },
+          { customerEmail: { [Sequelize.Op.iLike]: `%${query}%` } },
+          { designDescription: { [Sequelize.Op.iLike]: `%${query}%` } }
+        ]
+      }
     });
-    
-    // Query Pinecone
-    const queryRequest = {
-      vector: queryVector,
-      topK: parseInt(topK),
-      includeMetadata: true
-    };
-    
-    const response = await pineconeIndex.query(queryRequest);
-    
-    res.json(response.matches);
+    res.json(orders);
   } catch (error) {
-    console.error("Error searching similar custom orders:", error);
+    console.error("Error searching custom orders:", error);
     res.status(500).json({ error: error.message });
   }
 };

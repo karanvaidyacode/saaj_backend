@@ -14,6 +14,9 @@ const razorpay = new Razorpay({
 
 // Endpoint to create a new Razorpay order
 router.post("/create-order", async (req, res) => {
+  console.log("Creating Razorpay order with Key:", process.env.RAZORPAY_API_KEY);
+  console.log("Razorpay Secret set:", !!process.env.RAZORPAY_API_SECRET);
+
   // Extract only the parameters needed for Razorpay API
   const { amount, currency, receipt } = req.body;
   // Extract customer data separately (not passed to Razorpay)
@@ -38,20 +41,15 @@ router.post("/create-order", async (req, res) => {
     }
 
     // Create a real order with Razorpay
-    const order = await razorpay.orders.create({
+    const orderOptions = {
       amount: amountInPaise,
       currency: currency || "INR",
       receipt: receipt || "receipt_" + Date.now(),
-      // Add payment capture settings for better UPI experience
-      payment: {
-        capture: "automatic", // Automatically capture payment
-        capture_options: {
-          refund_speed: "optimum", // Optimize refund speed
-          automatic_expiry_period: 1800, // 30 minutes expiry for UPI
-          manual_expiry_period: 7200, // 2 hours for manual capture
-        },
-      },
-    });
+      payment_capture: 1, // Automatically capture payment
+    };
+
+    console.log("Creating Razorpay order with options:", orderOptions);
+    const order = await razorpay.orders.create(orderOptions);
 
     // Add customer data to the order response
     order.customerName = customerName;
@@ -66,6 +64,7 @@ router.post("/create-order", async (req, res) => {
     res.status(500).json({
       error: "Error creating order",
       message: err.message || "Unknown error occurred",
+      details: err
     });
   }
 });

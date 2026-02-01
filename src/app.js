@@ -12,6 +12,11 @@ const orderRoutes = require("./routes/order.routes");
 const customerRoutes = require("./routes/customer.routes");
 const razorpayRoutes = require("./routes/razorpay.routes");
 const contactRoutes = require("./routes/contact.routes");
+const inventoryRoutes = require("./routes/inventory.routes");
+const customOrderRoutes = require("./routes/customerOrder.routes");
+const analyticsRoutes = require("./routes/analytics.routes");
+
+const brandingRoutes = require("./routes/branding.routes");
 
 // Connect to PostgreSQL and start server only after connection is established
 connectDB()
@@ -90,6 +95,18 @@ connectDB()
 
     // Mount contact routes
     app.use("/api/contact", contactRoutes);
+
+    // Mount inventory routes
+    app.use("/api/admin/inventory", inventoryRoutes);
+
+    // Mount custom order routes
+    app.use("/api/admin/custom-orders", customOrderRoutes);
+
+    // Mount analytics routes
+    app.use("/api/admin/analytics", analyticsRoutes);
+
+    // Mount branding routes
+    app.use("/api/admin/branding", brandingRoutes);
 
     // Basic health check
     app.get("/", (req, res) => res.json({ status: "ok" }));

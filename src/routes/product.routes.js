@@ -5,10 +5,11 @@ const prod = require('../controllers/product.controller');
 router.get('/products/search', prod.searchProducts);
 router.get('/products', prod.getAllProducts);
 router.get('/products/:id', prod.getProductById);
+router.post('/products/upload-media', prod.uploadMedia, prod.handleUpload);
 
 // Admin routes (secure)
-router.post('/products', prod.isAdmin, prod.uploadImage, prod.createProduct);
-router.put('/products/:id', prod.isAdmin, prod.uploadImage, prod.updateProduct);
+router.post('/products', prod.isAdmin, prod.uploadMedia, prod.createProduct);
+router.put('/products/:id', prod.isAdmin, prod.uploadMedia, prod.updateProduct);
 router.delete('/products/:id', prod.isAdmin, prod.deleteProduct);
 
 module.exports = router;

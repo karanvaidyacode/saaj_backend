@@ -1,46 +1,27 @@
-const { pineconeIndex } = require('../utils/pinecone');
-
-// In-memory data for analytics (in production, you might want to use a database)
-let analyticsData = {
-  totalOrders: 0,
-  totalRevenue: 0,
-  totalCustomers: 0,
-  totalProducts: 0,
-  ordersByStatus: {},
-  revenueByCategory: {},
-  topSellingProducts: [],
-  customerGrowth: []
-};
-
-// Remove Pinecone references and replace with PostgreSQL-based logic
-const { User } = require('../models/postgres');
-
-// Mock data for analytics since we're removing Pinecone
-const mockAnalyticsData = {
-  totalRevenue: 12345.67,
-  totalOrders: 123,
-  totalCustomers: 456,
-  avgOrderValue: 100.37,
-  conversionRate: 3.2,
-  topProducts: [
-    { name: "Diamond Ring", sales: 25 },
-    { name: "Gold Necklace", sales: 20 },
-    { name: "Silver Earrings", sales: 18 },
-  ],
-  salesData: [
-    { month: "Jan", revenue: 1200 },
-    { month: "Feb", revenue: 1900 },
-    { month: "Mar", revenue: 1500 },
-    { month: "Apr", revenue: 2100 },
-    { month: "May", revenue: 1800 },
-    { month: "Jun", revenue: 2400 },
-  ]
-};
+const { Order, Product, Customer } = require('../models/postgres');
+const { Sequelize } = require('sequelize');
 
 // Get dashboard statistics
 exports.getDashboardStats = async (req, res) => {
   try {
-    res.json(analyticsData);
+    const totalOrders = await Order.count();
+    const totalRevenueResult = await Order.sum('totalAmount', { where: { paymentStatus: 'paid' } });
+    const totalRevenue = parseFloat(totalRevenueResult || 0);
+    const totalCustomers = await Customer.count();
+    const totalProducts = await Product.count();
+
+    const ordersByStatus = await Order.findAll({
+      attributes: ['status', [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']],
+      group: ['status']
+    });
+
+    res.json({
+      totalOrders,
+      totalRevenue,
+      totalCustomers,
+      totalProducts,
+      ordersByStatus
+    });
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
     res.status(500).json({ error: error.message });
@@ -50,8 +31,37 @@ exports.getDashboardStats = async (req, res) => {
 // Get dashboard analytics
 exports.getDashboardAnalytics = async (req, res) => {
   try {
-    // In a real implementation, you would fetch this data from MongoDB
-    res.json(mockAnalyticsData);
+    const totalRevenueResult = await Order.sum('totalAmount', { where: { paymentStatus: 'paid' } });
+    const totalRevenue = parseFloat(totalRevenueResult || 0);
+    const totalOrders = await Order.count();
+    const totalCustomers = await Customer.count();
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    // Get sales trend (last 6 months)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    
+    const salesData = await Order.findAll({
+      attributes: [
+        [Sequelize.fn('TO_CHAR', Sequelize.col('createdAt'), 'Mon'), 'month'],
+        [Sequelize.fn('SUM', Sequelize.col('totalAmount')), 'revenue']
+      ],
+      where: {
+        paymentStatus: 'paid',
+        createdAt: { [Sequelize.Op.gte]: sixMonthsAgo }
+      },
+      group: [Sequelize.fn('TO_CHAR', Sequelize.col('createdAt'), 'Mon'), Sequelize.fn('DATE_PART', 'month', Sequelize.col('createdAt'))],
+      order: [[Sequelize.fn('DATE_PART', 'month', Sequelize.col('createdAt')), 'ASC']],
+      raw: true
+    });
+
+    res.json({
+      totalRevenue,
+      totalOrders,
+      totalCustomers,
+      avgOrderValue,
+      salesData: salesData.map(item => ({ month: item.month, revenue: parseFloat(item.revenue) }))
+    });
   } catch (error) {
     console.error('Error fetching analytics:', error);
     res.status(500).json({ message: 'Error fetching analytics', error: error.message });
@@ -61,8 +71,24 @@ exports.getDashboardAnalytics = async (req, res) => {
 // Get sales data
 exports.getSalesData = async (req, res) => {
   try {
-    // In a real implementation, you would fetch this data from MongoDB
-    res.json(mockAnalyticsData.salesData);
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    
+    const salesData = await Order.findAll({
+      attributes: [
+        [Sequelize.fn('TO_CHAR', Sequelize.col('createdAt'), 'Mon'), 'month'],
+        [Sequelize.fn('SUM', Sequelize.col('totalAmount')), 'revenue']
+      ],
+      where: {
+        paymentStatus: 'paid',
+        createdAt: { [Sequelize.Op.gte]: sixMonthsAgo }
+      },
+      group: [Sequelize.fn('TO_CHAR', Sequelize.col('createdAt'), 'Mon'), Sequelize.fn('DATE_PART', 'month', Sequelize.col('createdAt'))],
+      order: [[Sequelize.fn('DATE_PART', 'month', Sequelize.col('createdAt')), 'ASC']],
+      raw: true
+    });
+    
+    res.json(salesData.map(item => ({ month: item.month, revenue: parseFloat(item.revenue) })));
   } catch (error) {
     console.error('Error fetching sales data:', error);
     res.status(500).json({ message: 'Error fetching sales data', error: error.message });
@@ -72,23 +98,29 @@ exports.getSalesData = async (req, res) => {
 // Get order statistics
 exports.getOrderStats = async (req, res) => {
   try {
-    // In a real application, this would fetch data from your database
-    // For now, we'll return sample data
-    const orderStats = {
-      totalOrders: 124,
-      pendingOrders: 23,
-      completedOrders: 95,
-      cancelledOrders: 6,
-      orderTrend: [
-        { date: '2023-01-01', count: 12 },
-        { date: '2023-01-02', count: 15 },
-        { date: '2023-01-03', count: 18 },
-        { date: '2023-01-04', count: 14 },
-        { date: '2023-01-05', count: 20 }
-      ]
-    };
+    const totalOrders = await Order.count();
+    const pendingOrders = await Order.count({ where: { status: 'pending' } });
+    const completedOrders = await Order.count({ where: { status: 'delivered' } });
+    const cancelledOrders = await Order.count({ where: { status: 'cancelled' } });
     
-    res.json(orderStats);
+    const orderTrend = await Order.findAll({
+      attributes: [
+        [Sequelize.fn('DATE', Sequelize.col('createdAt')), 'date'],
+        [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
+      ],
+      group: [Sequelize.fn('DATE', Sequelize.col('createdAt'))],
+      order: [[Sequelize.fn('DATE', Sequelize.col('createdAt')), 'DESC']],
+      limit: 7,
+      raw: true
+    });
+    
+    res.json({
+      totalOrders,
+      pendingOrders,
+      completedOrders,
+      cancelledOrders,
+      orderTrend: orderTrend.reverse().map(item => ({ date: item.date, count: parseInt(item.count) }))
+    });
   } catch (error) {
     console.error("Error fetching order stats:", error);
     res.status(500).json({ error: error.message });
@@ -98,8 +130,27 @@ exports.getOrderStats = async (req, res) => {
 // Get top products
 exports.getTopProducts = async (req, res) => {
   try {
-    // In a real implementation, you would fetch this data from MongoDB
-    res.json(mockAnalyticsData.topProducts);
+    // In a real app we'd need an OrderItems table. For now we use the JSON 'items' column in Order.
+    // This is a simplified approach.
+    const orders = await Order.findAll({ where: { paymentStatus: 'paid' }, raw: true });
+    const productSales = {};
+    
+    orders.forEach(order => {
+      const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+      if (Array.isArray(items)) {
+        items.forEach(item => {
+          const name = item.name || item.productName || 'Unknown';
+          productSales[name] = (productSales[name] || 0) + (item.quantity || 1);
+        });
+      }
+    });
+    
+    const topProducts = Object.entries(productSales)
+      .map(([name, sales]) => ({ name, sales }))
+      .sort((a, b) => b.sales - a.sales)
+      .slice(0, 5);
+      
+    res.json(topProducts);
   } catch (error) {
     console.error('Error fetching top products:', error);
     res.status(500).json({ message: 'Error fetching top products', error: error.message });
@@ -109,19 +160,15 @@ exports.getTopProducts = async (req, res) => {
 // Get customer analytics
 exports.getCustomerAnalytics = async (req, res) => {
   try {
-    // In a real implementation, you would fetch this data from MongoDB
+    const totalCustomers = await Customer.count();
+    const activeCustomers = await Customer.count({ where: { status: 'active' } });
+    
     res.json({
-      totalCustomers: mockAnalyticsData.totalCustomers,
-      newCustomers: 45,
-      returningCustomers: 12,
-      customerGrowth: [
-        { month: "Jan", new: 30, returning: 5 },
-        { month: "Feb", new: 35, returning: 8 },
-        { month: "Mar", new: 25, returning: 10 },
-        { month: "Apr", new: 40, returning: 7 },
-        { month: "May", new: 38, returning: 12 },
-        { month: "Jun", new: 45, returning: 15 },
-      ]
+      totalCustomers,
+      activeCustomers,
+      newCustomers: 0, // Placeholder
+      returningCustomers: 0, // Placeholder
+      customerGrowth: [] // Placeholder
     });
   } catch (error) {
     console.error('Error fetching customer analytics:', error);
@@ -132,83 +179,47 @@ exports.getCustomerAnalytics = async (req, res) => {
 // Get product performance data
 exports.getProductPerformance = async (req, res) => {
   try {
-    // In a real application, this would fetch data from your database
-    // For now, we'll return sample data
-    const productPerformance = {
-      topSellingProducts: [
-        { name: 'Gold Necklace', sales: 42, revenue: 126000 },
-        { name: 'Diamond Earrings', sales: 38, revenue: 95000 },
-        { name: 'Silver Bracelet', sales: 35, revenue: 52500 },
-        { name: 'Pearl Ring', sales: 30, revenue: 45000 }
-      ],
-      categoryPerformance: [
-        { category: 'Necklaces', sales: 65, revenue: 195000 },
-        { category: 'Earrings', sales: 52, revenue: 130000 },
-        { category: 'Bracelets', sales: 48, revenue: 72000 },
-        { category: 'Rings', sales: 42, revenue: 63000 }
-      ]
-    };
+    const topSellingProducts = await this.getTopProducts(req, { json: (data) => data }); // Reusing logic
     
-    res.json(productPerformance);
+    const categoryStats = await Product.findAll({
+      attributes: [
+        'category',
+        [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
+      ],
+      group: ['category']
+    });
+    
+    res.json({
+      topSellingProducts,
+      categoryPerformance: categoryStats.map(c => ({ category: c.category, count: parseInt(c.get('count')) }))
+    });
   } catch (error) {
     console.error("Error fetching product performance:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
-// Search analytics data using vector similarity
+// Generic Search (Moved from Vector Search to DB ILIKE)
 exports.searchAnalytics = async (req, res) => {
   try {
-    const { query, topK = 10 } = req.body;
-    
-    // Convert query to vector (simplified for demo)
-    const vector = new Array(1536).fill(0);
-    const hash = (str) => {
-      let hash = 0;
-      for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
-      }
-      return Math.abs(hash);
-    };
-    
-    const text = query.toLowerCase();
-    for (let i = 0; i < Math.min(10, text.length); i++) {
-      const index = hash(text.substring(i, i + 5)) % 1536;
-      vector[index] = (vector[index] || 0) + 1;
-    }
-    
-    // Query Pinecone
-    const queryRequest = {
-      vector: vector,
-      topK: parseInt(topK),
-      includeMetadata: true
-    };
-    
-    const response = await pineconeIndex.query(queryRequest);
-    
-    res.json(response.matches);
+    const { query } = req.body;
+    const orders = await Order.findAll({
+      where: {
+        [Sequelize.Op.or]: [
+          { orderNumber: { [Sequelize.Op.iLike]: `%${query}%` } },
+          { customerName: { [Sequelize.Op.iLike]: `%${query}%` } }
+        ]
+      },
+      limit: 10
+    });
+    res.json(orders);
   } catch (error) {
     console.error("Error searching analytics data:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
-// Update analytics data (for demo purposes)
+// Update analytics data (Stubs to maintain parity with routes)
 exports.updateAnalytics = async (req, res) => {
-  try {
-    const { data } = req.body;
-    
-    // Update analytics data
-    analyticsData = {
-      ...analyticsData,
-      ...data
-    };
-    
-    res.json({ success: true, message: "Analytics data updated" });
-  } catch (error) {
-    console.error("Error updating analytics data:", error);
-    res.status(500).json({ error: error.message });
-  }
+  res.json({ success: true, message: "Stats are now real-time from database" });
 };

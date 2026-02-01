@@ -1,32 +1,3 @@
-const { pineconeIndex } = require('../utils/pinecone');
-
-// Convert role data to vector representation
-const roleToVector = (role) => {
-  // This is a simplified example - in a real application, you would use an embedding model
-  // to convert role details into vectors
-  const vector = new Array(1536).fill(0);
-  
-  // Simple hash-based approach for demonstration
-  const hash = (str) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash);
-  };
-  
-  // Create a simple vector representation based on role properties
-  const text = `${role.name || ''} ${role.description || ''} ${role.permissions?.join(' ') || ''}`.toLowerCase();
-  for (let i = 0; i < Math.min(10, text.length); i++) {
-    const index = hash(text.substring(i, i + 5)) % 1536;
-    vector[index] = (vector[index] || 0) + 1;
-  }
-  
-  return vector;
-};
-
 // Remove Pinecone references and replace with PostgreSQL-based logic
 const { User } = require('../models/postgres');
 
@@ -165,7 +136,8 @@ exports.checkPermission = async (req, res) => {
       return res.status(400).json({ error: "roleId and permission are required" });
     }
     
-    const role = roles[roleId];
+    // Simple lookup - logic can be improved as needed with proper roles object/array
+    const role = roles.find(r => r.id === roleId);
     
     if (!role) {
       return res.status(404).json({ error: "Role not found" });
@@ -180,28 +152,10 @@ exports.checkPermission = async (req, res) => {
   }
 };
 
-// Search similar roles using vector similarity
+// Search similar roles (Stubbed out Pinecone)
 exports.searchSimilarRoles = async (req, res) => {
   try {
-    const { query, topK = 10 } = req.body;
-    
-    // Convert query to vector
-    const queryVector = roleToVector({ 
-      name: query, 
-      description: query, 
-      permissions: [query]
-    });
-    
-    // Query Pinecone
-    const queryRequest = {
-      vector: queryVector,
-      topK: parseInt(topK),
-      includeMetadata: true
-    };
-    
-    const response = await pineconeIndex.query(queryRequest);
-    
-    res.json(response.matches);
+    res.json([]);
   } catch (error) {
     console.error("Error searching similar roles:", error);
     res.status(500).json({ error: error.message });

@@ -1,4 +1,5 @@
-const { pineconeIndex } = require('../utils/pinecone');
+// const { pineconeIndex } = require('../utils/pinecone');
+const pineconeIndex = null; // Pinecone removed
 
 // Convert product data to vector representation
 const productToVector = (product) => {

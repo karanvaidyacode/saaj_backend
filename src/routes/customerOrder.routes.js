@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const customOrderController = require('../controllers/customOrder.controller.js');
+const customOrderController = require('../controllers/customerOrder.controller.js');
 const { isAdmin } = require('../controllers/product.controller.js');
 
 // Custom Order routes

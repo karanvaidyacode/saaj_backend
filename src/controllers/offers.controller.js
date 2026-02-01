@@ -1,18 +1,11 @@
+const { OfferSubscriber } = require('../models/postgres');
 const { sendEmail } = require('../utils/email');
 
-// Store emails temporarily (in production, use a database)
-const subscribedEmails = new Set();
+// Track remaining offers globally
+// In a real app, this value might be stored in a Settings table or as a metadata in the DB.
+// For now, we'll use a fixed initial count and subtract the number of subscribers.
+const INITIAL_OFFER_COUNT = 5;
 
-// Track remaining offers globally (shared across all browsers/sessions)
-// In production, this should be stored in a database
-let remainingOffers = 30; // Default starting count
-const INITIAL_OFFER_COUNT = 30;
-
-/**
- * Subscribe to offers and send coupon code
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
 exports.subscribeToOffers = async (req, res) => {
   try {
     const { email } = req.body;
@@ -21,45 +14,40 @@ exports.subscribeToOffers = async (req, res) => {
       return res.status(400).json({ message: 'Email is required' });
     }
     
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ message: 'Invalid email format' });
     }
     
-    // Check if already subscribed
-    if (subscribedEmails.has(email.toLowerCase())) {
+    // Check if already subscribed in DB
+    const existing = await OfferSubscriber.findOne({ where: { email: email.toLowerCase() } });
+    if (existing) {
+      const subscriberCount = await OfferSubscriber.count();
       return res.status(400).json({ 
         message: 'This email has already claimed the offer',
         couponCode: 'SAAJ10',
-        remainingOffers: remainingOffers
+        remainingOffers: Math.max(0, INITIAL_OFFER_COUNT - subscriberCount)
       });
     }
     
-    // Check if offers are still available
-    if (remainingOffers <= 0) {
+    const subscriberCount = await OfferSubscriber.count();
+    if (subscriberCount >= INITIAL_OFFER_COUNT) {
       return res.status(400).json({ 
         message: 'Sorry, all offers have been claimed',
         remainingOffers: 0
       });
     }
     
-    // Add to subscribed list
-    subscribedEmails.add(email.toLowerCase());
+    // Create subscriber in DB
+    await OfferSubscriber.create({ email: email.toLowerCase() });
+    const newCount = await OfferSubscriber.count();
+    const remainingOffers = Math.max(0, INITIAL_OFFER_COUNT - newCount);
     
-    // Decrement remaining offers when someone subscribes (claims the offer)
-    if (remainingOffers > 0) {
-      remainingOffers = Math.max(0, remainingOffers - 1);
-    }
-    
-    // In a production app, you would save this to a database
-    
-    // Send email with coupon code (optional)
+    // Send email
     try {
       await sendEmail({
         to: email,
         subject: '10% OFF Your SaajJewels Order',
-        text: 'Thank you for subscribing! Use coupon code SAAJ10 at checkout to get 10% off your order.',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #c6a856;">Thank You for Subscribing to SaajJewels!</h2>
@@ -75,13 +63,12 @@ exports.subscribeToOffers = async (req, res) => {
       });
     } catch (emailError) {
       console.error('Failed to send email:', emailError);
-      // Continue even if email fails - we'll still return the coupon code
     }
     
     return res.status(200).json({
       message: 'Successfully subscribed',
       couponCode: 'SAAJ10',
-      remainingOffers: remainingOffers
+      remainingOffers
     });
     
   } catch (error) {
@@ -90,28 +77,25 @@ exports.subscribeToOffers = async (req, res) => {
   }
 };
 
-/**
- * Get all subscribed emails (admin only)
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-exports.getSubscribedEmails = (req, res) => {
-  // In production, add authentication to ensure only admins can access this
-  return res.status(200).json({
-    count: subscribedEmails.size,
-    emails: Array.from(subscribedEmails)
-  });
+exports.getSubscribedEmails = async (req, res) => {
+  try {
+    const subscribers = await OfferSubscriber.findAll({ order: [['createdAt', 'DESC']] });
+    return res.status(200).json({
+      count: subscribers.length,
+      emails: subscribers.map(s => s.email)
+    });
+  } catch (error) {
+    console.error('Error fetching subscribers:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
 };
 
-/**
- * Get remaining offer count
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-exports.getRemainingOffers = (req, res) => {
+exports.getRemainingOffers = async (req, res) => {
   try {
+    const subscriberCount = await OfferSubscriber.count();
+    const remaining = Math.max(0, INITIAL_OFFER_COUNT - subscriberCount);
     return res.status(200).json({
-      remainingOffers: Math.max(0, remainingOffers),
+      remainingOffers: remaining,
       totalOffers: INITIAL_OFFER_COUNT
     });
   } catch (error) {
@@ -120,51 +104,45 @@ exports.getRemainingOffers = (req, res) => {
   }
 };
 
-/**
- * Claim an offer (decrement remaining count)
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-exports.claimOffer = (req, res) => {
+exports.claimOffer = async (req, res) => {
   try {
-    if (remainingOffers > 0) {
-      remainingOffers = Math.max(0, remainingOffers - 1);
-      return res.status(200).json({
-        success: true,
-        remainingOffers: remainingOffers,
-        message: 'Offer claimed successfully'
-      });
-    } else {
-      return res.status(200).json({
-        success: false,
-        remainingOffers: 0,
-        message: 'No offers remaining'
-      });
+    const { email } = req.body;
+    
+    // If email is provided, create a subscriber
+    if (email) {
+      const existing = await OfferSubscriber.findOne({ where: { email: email.toLowerCase() } });
+      if (!existing) {
+        const subscriberCount = await OfferSubscriber.count();
+        if (subscriberCount < INITIAL_OFFER_COUNT) {
+          await OfferSubscriber.create({ email: email.toLowerCase() });
+        }
+      }
     }
+    
+    const count = await OfferSubscriber.count();
+    const remaining = Math.max(0, INITIAL_OFFER_COUNT - count);
+    
+    return res.status(200).json({ 
+      success: true, 
+      remainingOffers: remaining 
+    });
   } catch (error) {
-    console.error('Error claiming offer:', error);
+    console.error('Error in claimOffer:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
-/**
- * Check if an email has already claimed an offer
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-exports.checkEmailClaimed = (req, res) => {
+exports.checkEmailClaimed = async (req, res) => {
   try {
     const { email } = req.query;
+    if (!email) return res.status(400).json({ message: 'Email is required' });
     
-    if (!email) {
-      return res.status(400).json({ message: 'Email is required' });
-    }
-    
-    const isClaimed = subscribedEmails.has(email.toLowerCase());
+    const subscriber = await OfferSubscriber.findOne({ where: { email: email.toLowerCase() } });
+    const subscriberCount = await OfferSubscriber.count();
     
     return res.status(200).json({
-      claimed: isClaimed,
-      remainingOffers: remainingOffers
+      claimed: !!subscriber,
+      remainingOffers: Math.max(0, INITIAL_OFFER_COUNT - subscriberCount)
     });
   } catch (error) {
     console.error('Error checking email claim status:', error);

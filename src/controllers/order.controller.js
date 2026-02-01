@@ -266,11 +266,18 @@ exports.createOrder = async (req, res) => {
               totalPrice: totalPrice,
             });
 
+            let customizationHtml = '';
+            if (item.shirtSize) customizationHtml += `<div style="font-size: 11px; color: #777;">Size: ${item.shirtSize}</div>`;
+            if (item.customRequest) customizationHtml += `<div style="font-size: 11px; color: #777; font-style: italic;">Request: ${item.customRequest}</div>`;
+
             return `
             <tr>
-              <td>${item.name || "Unknown Item"}</td>
-              <td>${quantity}</td>
-              <td>₹${totalPrice}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">
+                <div>${item.name || "Unknown Item"}</div>
+                ${customizationHtml}
+              </td>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">${quantity}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">₹${totalPrice}</td>
             </tr>
           `;
           })
@@ -299,9 +306,7 @@ exports.createOrder = async (req, res) => {
                   savedOrder.totalAmount || 0
                 ).toFixed(2)}</p>
                 <p><strong>Payment Method:</strong> ${
-                  savedOrder.paymentMethod === "cod"
-                    ? "Cash on Delivery"
-                    : "Online Payment"
+                  "Online Payment"
                 }</p>
               </div>
               

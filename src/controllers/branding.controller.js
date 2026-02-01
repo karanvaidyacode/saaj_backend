@@ -1,34 +1,3 @@
-const { pineconeIndex } = require("../utils/pinecone");
-
-// Convert branding data to vector representation
-const brandingToVector = (branding) => {
-  // This is a simplified example - in a real application, you would use an embedding model
-  // to convert branding details into vectors
-  const vector = new Array(1536).fill(0);
-
-  // Simple hash-based approach for demonstration
-  const hash = (str) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash);
-  };
-
-  // Create a simple vector representation based on branding properties
-  const text = `${branding.name || ""} ${branding.tagline || ""} ${
-    branding.description || ""
-  } ${branding.industry || ""}`.toLowerCase();
-  for (let i = 0; i < Math.min(10, text.length); i++) {
-    const index = hash(text.substring(i, i + 5)) % 1536;
-    vector[index] = (vector[index] || 0) + 1;
-  }
-
-  return vector;
-};
-
 // Remove Pinecone references and replace with PostgreSQL-based logic
 const { User } = require("../models/postgres");
 
@@ -121,31 +90,14 @@ exports.resetBrandingSettings = async (req, res) => {
   }
 };
 
-// Search similar branding configurations using vector similarity
+// Search similar branding configurations (Stubbed out Pinecone)
 exports.searchSimilarBranding = async (req, res) => {
   try {
-    const { query, topK = 10 } = req.body;
-
-    // Convert query to vector
-    const queryVector = brandingToVector({
-      name: query,
-      tagline: query,
-      description: query,
-      industry: query,
-    });
-
-    // Query Pinecone
-    const queryRequest = {
-      vector: queryVector,
-      topK: parseInt(topK),
-      includeMetadata: true,
-    };
-
-    const response = await pineconeIndex.query(queryRequest);
-
-    res.json(response.matches);
+    // Pinecone removed - returning empty results or current settings if name matches
+    res.json([]);
   } catch (error) {
     console.error("Error searching similar branding:", error);
     res.status(500).json({ error: error.message });
   }
 };
+
